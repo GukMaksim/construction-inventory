@@ -1,0 +1,153 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Користувачі
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  name      String
+  role      Role     @default(STOREKEEPER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+enum Role {
+  ADMIN
+  STOREKEEPER
+  FOREMAN
+}
+
+// Постачальники
+model Supplier {
+  id            Int       @id @default(autoincrement())
+  name          String
+  contactPerson String?
+  phone         String?
+  email         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  invoices      Invoice[]
+
+  @@map("suppliers")
+}
+
+// Товари
+model Product {
+  id             Int              @id @default(autoincrement())
+  code           String          @unique
+  barcode        String?
+  name           String
+  unit           String
+  price          Float
+  minQuantity    Int             @default(0)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  invoiceItems   InvoiceItem[]
+  stockMovements StockMovement[]
+
+  @@map("products")
+}
+
+// Накладні
+model Invoice {
+  id          Int           @id @default(autoincrement())
+  number      String        @unique
+  date        DateTime
+  supplierId  Int
+  supplier    Supplier      @relation(fields: [supplierId], references: [id])
+  total       Float
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  items       InvoiceItem[]
+
+  @@map("invoices")
+}
+
+// Позиції накладної
+model InvoiceItem {
+  id        Int      @id @default(autoincrement())
+  invoiceId Int
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id])
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id])
+  quantity  Int
+  price     Float
+  total     Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("invoice_items")
+}
+
+// Об'єкти будівництва
+model ConstructionSite {
+  id        Int       @id @default(autoincrement())
+  name      String
+  address   String?
+  status    SiteStatus @default(ACTIVE)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  sections  Section[]
+
+  @@map("construction_sites")
+}
+
+enum SiteStatus {
+  ACTIVE
+  COMPLETED
+  SUSPENDED
+}
+
+// Розділи об'єкту
+model Section {
+  id                Int             @id @default(autoincrement())
+  name              String
+  type              SectionType
+  constructionSiteId Int
+  constructionSite   ConstructionSite @relation(fields: [constructionSiteId], references: [id])
+  parentId          Int?
+  parent            Section?         @relation("SectionToSection", fields: [parentId], references: [id])
+  children          Section[]        @relation("SectionToSection")
+  stockMovements    StockMovement[]
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@map("sections")
+}
+
+enum SectionType {
+  ELECTRICAL
+  PLUMBING
+}
+
+// Рух товарів
+model StockMovement {
+  id          Int       @id @default(autoincrement())
+  date        DateTime
+  type        MovementType
+  productId   Int
+  product     Product   @relation(fields: [productId], references: [id])
+  quantity    Int
+  sectionId   Int?
+  section     Section?  @relation(fields: [sectionId], references: [id])
+  documentId  Int?
+  documentType String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("stock_movements")
+}
+
+enum MovementType {
+  IN
+  OUT
+}
