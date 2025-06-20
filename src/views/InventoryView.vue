@@ -29,20 +29,22 @@
             <Column field="quantity" header="Кількість" :sortable="true" style="width: 120px">
               <template #body="{ data }">
                 <div :class="{ 'text-red-500': data.quantity <= 0 }">
-                  {{ data.quantity }}
+                  {{ data.quantity ?? 0 }}
                 </div>
               </template>
             </Column>
-            <Column field="price" header="Ціна" :sortable="true" style="width: 120px">
+            <Column field="avgPrice" header="Середня ціна" :sortable="true" style="width: 120px">
               <template #body="{ data }">
-                {{ formatCurrency(data.price) }}
+                {{ formatCurrency(data.avgPrice ?? data.price) }}
               </template>
             </Column>
-            <Column header="Дії" style="width: 100px">
+            <Column header="Дії" style="width: 140px">
               <template #body="slotProps">
                 <Button icon="pi pi-pencil" class="p-button-text p-button-sm" @click="editProduct(slotProps.data)" />
                 <Button icon="pi pi-history" class="p-button-text p-button-sm"
                   @click="showProductHistory(slotProps.data)" />
+                <Button icon="pi pi-trash" class="p-button-text p-button-danger p-button-sm"
+                  @click="deleteProductHandler(slotProps.data)" />
               </template>
             </Column>
           </DataTable>
@@ -64,10 +66,12 @@
                 {{ formatCurrency(data.total) }}
               </template>
             </Column>
-            <Column header="Дії" style="width: 100px">
+            <Column header="Дії" style="width: 140px">
               <template #body="slotProps">
                 <Button icon="pi pi-eye" class="p-button-text p-button-sm" @click="viewInvoice(slotProps.data)" />
                 <Button icon="pi pi-print" class="p-button-text p-button-sm" @click="printInvoice(slotProps.data)" />
+                <Button icon="pi pi-trash" class="p-button-text p-button-danger p-button-sm"
+                  @click="deleteInvoiceHandler(slotProps.data)" />
               </template>
             </Column>
           </DataTable>
@@ -151,9 +155,9 @@
           v-if="invoiceDialog.visible">
           <Column field="code" header="Код">
             <template #body="{ data, index }">
-              <AutoComplete v-if="invoiceDialog.mode !== 'view'" v-model="data.code" :suggestions="productSuggestions"
-                @complete="searchProducts($event)" @item-select="onProductSelect($event, index)" field="code" />
-              <span v-else>{{ data.code }}</span>
+              <AutoComplete v-if="invoiceDialog.mode !== 'view'" v-model="data.name" :suggestions="productSuggestions"
+                @complete="searchProducts($event)" @item-select="onProductSelect($event, index)" field="name" />
+              <span v-else>{{ data.name }}</span>
             </template>
           </Column>
           <Column field="name" header="Назва" />
@@ -234,6 +238,7 @@ import { useInventoryStore } from '@/stores/inventory'
 import { storeToRefs } from 'pinia'
 import type { Product, Invoice, InvoiceItem, Unit, InventoryMovement } from '@/types/inventory'
 import { useToast } from 'primevue/usetoast'
+import api, { getSuppliers } from '@/api'
 
 // Components
 import TabView from 'primevue/tabview'
@@ -296,6 +301,8 @@ const historyDialog = ref({
   product: null as Product | null,
   movements: [] as InventoryMovement[]
 })
+
+const suppliers = ref([]);
 
 // Methods
 const formatCurrency = (value: number) => {
@@ -395,9 +402,16 @@ const updateItemTotal = (index: number) => {
   item.total = item.quantity * item.price
 }
 
+// Для выбора товара по названию
 const searchProducts = (event: { query: string }) => {
-  productSuggestions.value = store.searchProducts(event.query)
-}
+  const query = event.query.toLowerCase();
+  productSuggestions.value = store.products.filter(
+    (product) =>
+      product.name.toLowerCase().includes(query) ||
+      product.code.toLowerCase().includes(query) ||
+      (product.barcode?.toLowerCase().includes(query) ?? false)
+  );
+};
 
 const onProductSelect = (event: { value: Product }, index: number) => {
   const item = invoiceDialog.value.data.items[index]
@@ -447,41 +461,74 @@ const showProductHistory = async (product: Product) => {
   historyDialog.value.movements = []
 }
 
+// Delete methods
+const deleteProductHandler = async (product: Product) => {
+  try {
+    await store.deleteProduct(product.id!);
+    toast.add({
+      severity: 'success',
+      summary: 'Успішно',
+      detail: 'Товар видалено',
+      life: 3000
+    });
+  } catch (error) {
+    toast.add({
+      severity: 'error',
+      summary: 'Помилка',
+      detail: 'Не вдалося видалити товар',
+      life: 3000
+    });
+  }
+};
+
+const deleteInvoiceHandler = async (invoice: Invoice) => {
+  try {
+    await store.deleteInvoice(invoice.id!);
+    toast.add({
+      severity: 'success',
+      summary: 'Успішно',
+      detail: 'Накладну видалено',
+      life: 3000
+    });
+  } catch (error) {
+    toast.add({
+      severity: 'error',
+      summary: 'Помилка',
+      detail: 'Не вдалося видалити накладну',
+      life: 3000
+    });
+  }
+};
+
 // Lifecycle
 onMounted(async () => {
-  await store.loadProducts()
-  await store.loadInvoices()
+  await store.loadProducts();
+  await store.loadInvoices();
+  // Загрузка постачальників
+  try {
+    const response = await getSuppliers();
+    suppliers.value = response.data;
+  } catch (error) {
+    toast.add({
+      severity: 'error',
+      summary: 'Помилка',
+      detail: 'Не вдалося завантажити постачальників',
+      life: 3000
+    })
+  }
 })
 </script>
 
 <style scoped>
 .inventory-view {
-  background: white;
-  padding: 1.5rem;
-  border-radius: 6px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 1rem;
 }
 
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem;
-}
-
-.header h2 {
-  margin: 0;
-}
-
-.content-tabs {
-  margin-top: 1rem;
-}
-
-.invoice-items {
-  margin-top: 1rem;
-  border: 1px solid var(--surface-border);
-  border-radius: 6px;
-  padding: 1rem;
+  margin-bottom: 1rem;
 }
 
 .header-buttons {
@@ -489,15 +536,100 @@ onMounted(async () => {
   gap: 0.5rem;
 }
 
-:deep(.p-dropdown) {
+.content-tabs {
+  margin-top: 1rem;
+}
+
+.mb-3 {
+  margin-bottom: 1rem;
+}
+
+.w-full {
   width: 100%;
 }
 
-:deep(.p-calendar) {
+.md\:w-25rem {
+  width: 25rem;
+}
+
+.text-red-500 {
+  color: #ef4444;
+}
+
+.text-xl {
+  font-size: 1.25rem;
+}
+
+.flex {
+  display: flex;
+}
+
+.justify-content-between {
+  justify-content: space-between;
+}
+
+.align-items-center {
+  align-items: center;
+}
+
+.mt-2 {
+  margin-top: 0.5rem;
+}
+
+.p-datatable-sm {
+  font-size: 0.875rem;
+}
+
+.p-button-text {
+  padding: 0.5rem 1rem;
+}
+
+.p-button-danger {
+  color: #fff;
+  background-color: #dc2626;
+  border-color: #dc2626;
+}
+
+.p-button-success {
+  color: #fff;
+  background-color: #16a34a;
+  border-color: #16a34a;
+}
+
+.p-input-icon-left {
+  position: relative;
+}
+
+.p-input-icon-left .pi {
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.p-dropdown {
   width: 100%;
 }
 
-:deep(.p-autocomplete) {
+.p-calendar {
   width: 100%;
+}
+
+.p-inputtext {
+  width: 100%;
+}
+
+.p-button {
+  min-width: 4rem;
+}
+
+.tag-success {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.tag-warning {
+  background-color: #fee2e2;
+  color: #b91c1c;
 }
 </style>

@@ -33,22 +33,8 @@
                 <Button label="Додати розділ" icon="pi pi-plus" class="p-button-outlined p-button-sm"
                   @click="openNewSectionDialog(slotProps.data, 'electrical')" />
               </div>
-              <TreeTable :value="getElectricalSections(slotProps.data)" :loading="loading">
-                <Column field="name" header="Назва розділу" expander></Column>
-                <Column field="itemsCount" header="Кількість позицій"></Column>
-                <Column field="totalAmount" header="Сума">
-                  <template #body="{ data }">
-                    {{ formatCurrency(data.totalAmount) }}
-                  </template>
-                </Column>
-                <Column header="Дії" style="width: 8rem">
-                  <template #body="{ node }">
-                    <Button icon="pi pi-pencil" class="p-button-text p-button-sm" @click="editSection(node.data)" />
-                    <Button icon="pi pi-trash" class="p-button-text p-button-danger p-button-sm"
-                      @click="deleteSection(node.data)" />
-                  </template>
-                </Column>
-              </TreeTable>
+              <SectionList :site-id="slotProps.data.id" type="electrical" @edit="handleSectionEdit"
+                @delete="handleSectionDelete" />
             </TabPanel>
 
             <!-- Сантехніка -->
@@ -57,22 +43,8 @@
                 <Button label="Додати розділ" icon="pi pi-plus" class="p-button-outlined p-button-sm"
                   @click="openNewSectionDialog(slotProps.data, 'plumbing')" />
               </div>
-              <TreeTable :value="getPlumbingSections(slotProps.data)" :loading="loading">
-                <Column field="name" header="Назва розділу" expander></Column>
-                <Column field="itemsCount" header="Кількість позицій"></Column>
-                <Column field="totalAmount" header="Сума">
-                  <template #body="{ data }">
-                    {{ formatCurrency(data.totalAmount) }}
-                  </template>
-                </Column>
-                <Column header="Дії" style="width: 8rem">
-                  <template #body="{ node }">
-                    <Button icon="pi pi-pencil" class="p-button-text p-button-sm" @click="editSection(node.data)" />
-                    <Button icon="pi pi-trash" class="p-button-text p-button-danger p-button-sm"
-                      @click="deleteSection(node.data)" />
-                  </template>
-                </Column>
-              </TreeTable>
+              <SectionList :site-id="slotProps.data.id" type="plumbing" @edit="handleSectionEdit"
+                @delete="handleSectionDelete" />
             </TabPanel>
 
             <!-- Переміщення товарів -->
@@ -81,7 +53,7 @@
                 <Button label="Перемістити товари" icon="pi pi-send" class="p-button-success"
                   @click="openTransferDialog(slotProps.data)" />
               </div>
-              <DataTable :value="getMovements(slotProps.data)" :loading="loading">
+              <DataTable :value="getMovements(slotProps.data)" :loading="loading" class="p-datatable-sm">
                 <Column field="date" header="Дата">
                   <template #body="{ data }">
                     {{ formatDate(data.date) }}
@@ -105,441 +77,222 @@
     </DataTable>
 
     <!-- Діалог об'єкту -->
-    <Dialog v-model:visible="siteDialog.visible"
-      :header="siteDialog.mode === 'create' ? 'Новий об'єкт' : 'Редагування об'єкту'" modal class="p-fluid">
+    <Dialog v-model:visible="showSiteDialog" :header="editingSite ? 'Редагування об\'єкту' : 'Новий об\'єкт'" modal
+      class="p-fluid">
       <div class="grid">
         <div class="col-12">
           <div class="field">
             <label for="name">Назва*</label>
-            <InputText id="name" v-model="siteDialog.data.name" required autofocus />
+            <InputText id="name" v-model="siteForm.name" required autofocus />
           </div>
         </div>
         <div class="col-12">
           <div class="field">
             <label for="address">Адреса</label>
-            <InputText id="address" v-model="siteDialog.data.address" />
+            <InputText id="address" v-model="siteForm.address" />
           </div>
         </div>
         <div class="col-12">
           <div class="field">
             <label for="status">Статус</label>
-            <Dropdown id="status" v-model="siteDialog.data.status" :options="siteStatuses" optionLabel="label"
+            <Dropdown id="status" v-model="siteForm.status" :options="siteStatuses" optionLabel="label"
               optionValue="value" />
           </div>
         </div>
       </div>
       <template #footer>
-        <Button label="Відміна" icon="pi pi-times" class="p-button-text" @click="closeSiteDialog" />
+        <Button label="Відміна" icon="pi pi-times" class="p-button-text" @click="showSiteDialog = false" />
         <Button label="Зберегти" icon="pi pi-check" @click="saveSite" />
       </template>
     </Dialog>
 
     <!-- Діалог розділу -->
-    <Dialog v-model:visible="sectionDialog.visible"
-      :header="sectionDialog.mode === 'create' ? 'Новий розділ' : 'Редагування розділу'" modal class="p-fluid">
-      <div class="field">
-        <label for="sectionName">Назва*</label>
-        <InputText id="sectionName" v-model="sectionDialog.data.name" required autofocus />
-      </div>
-      <template #footer>
-        <Button label="Відміна" icon="pi pi-times" class="p-button-text" @click="closeSectionDialog" />
-        <Button label="Зберегти" icon="pi pi-check" @click="saveSection" />
-      </template>
-    </Dialog>
+    <SectionDialog v-model="showSectionDialog" :section="editingSection" :site-id="selectedSiteId"
+      :type="currentSectionType" @save="handleSectionSave" />
 
     <!-- Діалог переміщення товарів -->
-    <Dialog v-model:visible="transferDialog.visible" header="Переміщення товарів" modal class="p-fluid" maximizable>
-      <div class="grid">
-        <div class="col-12">
-          <div class="field">
-            <label for="section">Розділ*</label>
-            <Dropdown id="section" v-model="transferDialog.data.sectionId" :options="getAllSections()"
-              optionLabel="name" optionValue="id" required />
-          </div>
-        </div>
-      </div>
-
-      <DataTable :value="transferDialog.data.items" class="p-datatable-sm" :scrollable="true" scrollHeight="400px">
-        <Column field="code" header="Код">
-          <template #body="{ data, index }">
-            <AutoComplete v-model="data.code" :suggestions="productSuggestions" @complete="searchProducts($event)"
-              @item-select="onProductSelect($event, index)" field="code" />
-          </template>
-        </Column>
-        <Column field="name" header="Назва" />
-        <Column field="availableQuantity" header="Доступно" />
-        <Column field="quantity" header="Кількість">
-          <template #body="{ data, index }">
-            <InputNumber v-model="data.quantity" :max="data.availableQuantity" :min="1" />
-          </template>
-        </Column>
-        <Column style="width: 4rem">
-          <template #body="{ index }">
-            <Button icon="pi pi-trash" class="p-button-text p-button-danger p-button-sm"
-              @click="removeTransferItem(index)" />
-          </template>
-        </Column>
-      </DataTable>
-
-      <div class="flex justify-content-between align-items-center mt-2">
-        <Button label="Додати позицію" icon="pi pi-plus" class="p-button-text" @click="addTransferItem" />
-      </div>
-
-      <template #footer>
-        <Button label="Відміна" icon="pi pi-times" class="p-button-text" @click="closeTransferDialog" />
-        <Button label="Перемістити" icon="pi pi-check" @click="saveTransfer" />
-      </template>
-    </Dialog>
+    <TransferDialog v-model:visible="showTransferDialog" :site-id="selectedSiteForTransfer"
+      @transfer-complete="handleTransferComplete" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useToast } from 'primevue/usetoast'
-import TabView from 'primevue/tabview'
-import TabPanel from 'primevue/tabpanel'
-import TreeTable from 'primevue/treetable'
-import Tag from 'primevue/tag'
-import Dropdown from 'primevue/dropdown'
-import AutoComplete from 'primevue/autocomplete'
-import InputNumber from 'primevue/inputnumber'
-import type { TreeNode } from 'primevue/tree'
+import { ref, onMounted, computed } from 'vue';
+import { useSitesStore } from '@/stores/sites';
+import { useSectionsStore } from '@/stores/sections';
+import { storeToRefs } from 'pinia';
+import SectionList from '@/components/sections/SectionList.vue';
+import SectionDialog from '@/components/sections/SectionDialog.vue';
+import TransferDialog from '@/components/transfers/TransferDialog.vue';
+import { useInventoryStore } from '@/stores/inventory';
 
-interface ConstructionSite {
-  id?: number
-  name: string
-  address: string
-  status: 'active' | 'completed' | 'suspended'
-}
+// Stores
+const sitesStore = useSitesStore();
+const sectionsStore = useSectionsStore();
+const inventoryStore = useInventoryStore();
+const { sites, loading, error } = storeToRefs(sitesStore);
 
-interface Section {
-  id?: number
-  siteId?: number
-  type: 'electrical' | 'plumbing'
-  name: string
-  parentId?: number
-  itemsCount?: number
-  totalAmount?: number
-}
+// Состояние компонента
+const expandedRows = ref([]);
+const showSiteDialog = ref(false);
+const showTransferDialog = ref(false);
+const editingSite = ref<any>(null);
+const currentSectionType = ref<'electrical' | 'plumbing'>('electrical');
+const selectedSiteId = ref<number | null>(null);
+const selectedSiteForTransfer = ref<number | null>(null);
 
-interface TransferItem {
-  code: string
-  name: string
-  productId?: number
-  quantity: number
-  availableQuantity?: number
-}
+const siteForm = ref({
+  name: '',
+  address: '',
+  status: 'ACTIVE'
+});
 
-const toast = useToast()
-const loading = ref(false)
-const sites = ref<ConstructionSite[]>([])
-const expandedRows = ref<ConstructionSite[]>([])
-const productSuggestions = ref<any[]>([])
+const sectionForm = ref({
+  name: '',
+  type: '',
+  constructionSiteId: null as number | null
+});
 
-// Діалоги
-const siteDialog = ref({
-  visible: false,
-  mode: 'create',
-  data: {} as ConstructionSite
-})
+// Загрузка данных при монтировании
+onMounted(async () => {
+  await sitesStore.fetchSites();
+});
 
-const sectionDialog = ref({
-  visible: false,
-  mode: 'create',
-  data: {} as Section,
-  parentSite: null as ConstructionSite | null,
-  type: 'electrical' as 'electrical' | 'plumbing'
-})
+// Форматирование и утилиты
+const getStatusLabel = (status: string) => {
+  const labels = {
+    ACTIVE: 'Активний',
+    COMPLETED: 'Завершений',
+    ON_HOLD: 'Призупинений'
+  };
+  return labels[status as keyof typeof labels] || status;
+};
 
-const transferDialog = ref({
-  visible: false,
-  data: {
-    siteId: null as number | null,
-    sectionId: null as number | null,
-    items: [] as TransferItem[]
-  }
-})
+const getStatusSeverity = (status: string) => {
+  const severity = {
+    ACTIVE: 'success',
+    COMPLETED: 'info',
+    ON_HOLD: 'warning'
+  };
+  return severity[status as keyof typeof severity] || 'info';
+};
 
-// Статуси об'єкту
-const siteStatuses = [
-  { label: 'Активний', value: 'active' },
-  { label: 'Завершений', value: 'completed' },
-  { label: 'Призупинений', value: 'suspended' }
-]
-
-// Методи форматування
 const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('uk-UA', {
-    style: 'currency',
-    currency: 'UAH'
-  }).format(value)
-}
+  return new Intl.NumberFormat('uk-UA', { style: 'currency', currency: 'UAH' }).format(value);
+};
 
 const formatDate = (date: string) => {
-  return new Date(date).toLocaleDateString('uk-UA')
-}
+  return new Date(date).toLocaleDateString('uk-UA');
+};
 
-// Допоміжні методи
-const getStatusSeverity = (status: string) => {
-  switch (status) {
-    case 'active': return 'success'
-    case 'completed': return 'info'
-    case 'suspended': return 'warning'
-    default: return null
-  }
-}
-
-const getStatusLabel = (status: string) => {
-  switch (status) {
-    case 'active': return 'Активний'
-    case 'completed': return 'Завершений'
-    case 'suspended': return 'Призупинений'
-    default: return status
-  }
-}
-
-// Методи для об'єктів
+// Обработчики диалогов
 const openNewSiteDialog = () => {
-  siteDialog.value = {
-    visible: true,
-    mode: 'create',
-    data: {
-      name: '',
-      address: '',
-      status: 'active'
-    }
-  }
-}
+  editingSite.value = null;
+  siteForm.value = {
+    name: '',
+    address: '',
+    status: 'ACTIVE'
+  };
+  showSiteDialog.value = true;
+};
 
-const editSite = (site: ConstructionSite) => {
-  siteDialog.value = {
-    visible: true,
-    mode: 'edit',
-    data: { ...site }
-  }
-}
+const openNewSectionDialog = (site: any, type: 'electrical' | 'plumbing') => {
+  editingSection.value = null;
+  currentSectionType.value = type;
+  selectedSiteId.value = site.id;
+  showSectionDialog.value = true;
+};
 
-const closeSiteDialog = () => {
-  siteDialog.value.visible = false
-}
+const openTransferDialog = (site: any) => {
+  selectedSiteForTransfer.value = site.id;
+  showTransferDialog.value = true;
+};
 
+const editSite = (site: any) => {
+  editingSite.value = site;
+  siteForm.value = {
+    name: site.name,
+    address: site.address,
+    status: site.status
+  };
+  showSiteDialog.value = true;
+};
+
+// Сохранение данных
 const saveSite = async () => {
   try {
-    // TODO: Implement API call
-    await loadSites()
-    closeSiteDialog()
-    toast.add({
-      severity: 'success',
-      summary: 'Успішно',
-      detail: 'Об'єкт збережено',
-      life: 3000
-    })
-  } catch (error) {
-    toast.add({
-      severity: 'error',
-      summary: 'Помилка',
-      detail: 'Не вдалося зберегти об'єкт',
-      life: 3000
-    })
-  }
-}
-
-const deleteSite = async (site: ConstructionSite) => {
-  try {
-    // TODO: Implement API call
-    await loadSites()
-    toast.add({
-      severity: 'success',
-      summary: 'Успішно',
-      detail: 'Об'єкт видалено',
-      life: 3000
-    })
-  } catch (error) {
-    toast.add({
-      severity: 'error',
-      summary: 'Помилка',
-      detail: 'Не вдалося видалити об'єкт',
-      life: 3000
-    })
-  }
-}
-
-// Методи для розділів
-const getElectricalSections = (site: ConstructionSite): TreeNode[] => {
-  // TODO: Implement API call
-  return []
-}
-
-const getPlumbingSections = (site: ConstructionSite): TreeNode[] => {
-  // TODO: Implement API call
-  return []
-}
-
-const openNewSectionDialog = (site: ConstructionSite, type: 'electrical' | 'plumbing') => {
-  sectionDialog.value = {
-    visible: true,
-    mode: 'create',
-    data: {
-      siteId: site.id,
-      type,
-      name: ''
-    },
-    parentSite: site,
-    type
-  }
-}
-
-const editSection = (section: Section) => {
-  sectionDialog.value = {
-    visible: true,
-    mode: 'edit',
-    data: { ...section },
-    parentSite: null,
-    type: section.type
-  }
-}
-
-const closeSectionDialog = () => {
-  sectionDialog.value.visible = false
-}
-
-const saveSection = async () => {
-  try {
-    // TODO: Implement API call
-    if (sectionDialog.value.parentSite) {
-      expandedRows.value = [...expandedRows.value, sectionDialog.value.parentSite]
+    if (editingSite.value) {
+      await sitesStore.updateSite(editingSite.value.id, siteForm.value);
+    } else {
+      await sitesStore.createSite(siteForm.value);
     }
-    await loadSites()
-    closeSectionDialog()
-    toast.add({
-      severity: 'success',
-      summary: 'Успішно',
-      detail: 'Розділ збережено',
-      life: 3000
-    })
-  } catch (error) {
-    toast.add({
-      severity: 'error',
-      summary: 'Помилка',
-      detail: 'Не вдалося зберегти розділ',
-      life: 3000
-    })
+    showSiteDialog.value = false;
+  } catch (err) {
+    // Ошибка будет обработана в store
   }
-}
+};
 
-const deleteSection = async (section: Section) => {
+const handleSectionSave = async (data: any) => {
   try {
-    // TODO: Implement API call
-    await loadSites()
-    toast.add({
-      severity: 'success',
-      summary: 'Успішно',
-      detail: 'Розділ видалено',
-      life: 3000
-    })
-  } catch (error) {
-    toast.add({
-      severity: 'error',
-      summary: 'Помилка',
-      detail: 'Не вдалося видалити розділ',
-      life: 3000
-    })
+    if (data.id) {
+      await sectionsStore.updateSection(data.id, data);
+    } else {
+      await sectionsStore.createSection(data);
+    }
+    showSectionDialog.value = false;
+    // Обновляем список разделов
+    if (selectedSiteId.value) {
+      await sectionsStore.fetchSectionsBySite(selectedSiteId.value);
+    }
+  } catch (err) {
+    // Ошибка будет обработана в store
   }
-}
+};
 
-// Методи для переміщення товарів
-const openTransferDialog = (site: ConstructionSite) => {
-  transferDialog.value = {
-    visible: true,
-    data: {
-      siteId: site.id,
-      sectionId: null,
-      items: []
+const handleSectionEdit = (section: any) => {
+  editingSection.value = section;
+  currentSectionType.value = section.type;
+  selectedSiteId.value = section.constructionSiteId;
+  showSectionDialog.value = true;
+};
+
+const handleSectionDelete = async (section: any) => {
+  if (confirm('Ви впевнені, що хочете видалити цей розділ?')) {
+    try {
+      await sectionsStore.deleteSection(section.id);
+      if (selectedSiteId.value) {
+        await sectionsStore.fetchSectionsBySite(selectedSiteId.value);
+      }
+    } catch (err) {
+      // Ошибка будет обработана в store
     }
   }
-  addTransferItem()
-}
+};
 
-const closeTransferDialog = () => {
-  transferDialog.value.visible = false
-}
-
-const addTransferItem = () => {
-  transferDialog.value.data.items.push({
-    code: '',
-    name: '',
-    quantity: 1
-  })
-}
-
-const removeTransferItem = (index: number) => {
-  transferDialog.value.data.items.splice(index, 1)
-}
-
-const searchProducts = (event: { query: string }) => {
-  // TODO: Implement product search
-  productSuggestions.value = []
-}
-
-const onProductSelect = (event: { value: any }, index: number) => {
-  const item = transferDialog.value.data.items[index]
-  item.productId = event.value.id
-  item.name = event.value.name
-  item.availableQuantity = event.value.quantity
-}
-
-const saveTransfer = async () => {
-  try {
-    // TODO: Implement API call
-    closeTransferDialog()
-    await loadSites()
-    toast.add({
-      severity: 'success',
-      summary: 'Успішно',
-      detail: 'Товари переміщено',
-      life: 3000
-    })
-  } catch (error) {
-    toast.add({
-      severity: 'error',
-      summary: 'Помилка',
-      detail: 'Не вдалося перемістити товари',
-      life: 3000
-    })
+const handleTransferComplete = async () => {
+  // Обновляем данные после перемещения
+  if (selectedSiteForTransfer.value) {
+    await sectionsStore.fetchSectionsBySite(selectedSiteForTransfer.value);
   }
-}
+};
 
-const getAllSections = () => {
-  // TODO: Implement getting all sections for current site
-  return []
-}
+// Получение разделов по типу
+const getElectricalSections = computed(() => {
+  return (site: any) => {
+    return site.sections?.filter((s: any) => s.type === 'electrical') || [];
+  };
+});
 
-const getMovements = (site: ConstructionSite) => {
-  // TODO: Implement getting movements for site
-  return []
-}
+const getPlumbingSections = computed(() => {
+  return (site: any) => {
+    return site.sections?.filter((s: any) => s.type === 'plumbing') || [];
+  };
+});
 
-// Загрузка даних
-const loadSites = async () => {
-  loading.value = true
-  try {
-    // TODO: Implement API call
-    sites.value = []
-  } catch (error) {
-    toast.add({
-      severity: 'error',
-      summary: 'Помилка',
-      detail: 'Не вдалося завантажити список об'єктів',
-      life: 3000
-    })
-  } finally {
-    loading.value = false
-  }
-}
-
-onMounted(() => {
-  loadSites()
-})
+const getMovements = (site: any) => {
+  // Здесь будет логика получения движений товаров для объекта
+  return [];
+};
 </script>
 
 <style scoped>

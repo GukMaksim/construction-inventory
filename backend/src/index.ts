@@ -7,6 +7,7 @@ import supplierRoutes from './routes/suppliers';
 import productRoutes from './routes/products';
 import invoiceRoutes from './routes/invoices';
 import siteRoutes from './routes/sites';
+import sectionRoutes from './routes/sections';
 import stockRoutes from './routes/stock';
 import reportRoutes from './routes/reports';
 
@@ -14,9 +15,14 @@ dotenv.config();
 
 const app = express();
 const prisma = new PrismaClient();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 3001;
 
-app.use(cors());
+app.use(
+	cors({
+		origin: 'http://localhost:3000', // Vite dev server порт
+		credentials: true,
+	})
+);
 app.use(express.json());
 
 // Middleware для добавления prisma в req
@@ -31,6 +37,7 @@ app.use('/api/suppliers', supplierRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/sites', siteRoutes);
+app.use('/api/sections', sectionRoutes);
 app.use('/api/stock', stockRoutes);
 app.use('/api/reports', reportRoutes);
 

@@ -50,6 +50,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useToast } from 'primevue/usetoast'
+import api from '@/api'
 
 interface Supplier {
   id?: number
@@ -74,8 +75,8 @@ const supplier = ref<Supplier>({
 const loadSuppliers = async () => {
   loading.value = true
   try {
-    // TODO: Implement API call
-    suppliers.value = []
+    const response = await api.get('/api/suppliers');
+    suppliers.value = response.data;
   } catch (error) {
     toast.add({
       severity: 'error',
@@ -99,52 +100,72 @@ const openNewSupplierDialog = () => {
   dialogVisible.value = true
 }
 
-const editSupplier = (data: Supplier) => {
-  dialogMode.value = 'edit'
-  supplier.value = { ...data }
-  dialogVisible.value = true
-}
-
-const deleteSupplier = async (data: Supplier) => {
-  try {
-    // TODO: Implement API call
-    await loadSuppliers()
-    toast.add({
-      severity: 'success',
-      summary: 'Успішно',
-      detail: 'Постачальника видалено',
-      life: 3000
-    })
-  } catch (error) {
-    toast.add({
-      severity: 'error',
-      summary: 'Помилка',
-      detail: 'Не вдалося видалити постачальника',
-      life: 3000
-    })
-  }
-}
-
 const saveSupplier = async () => {
+  loading.value = true;
   try {
-    // TODO: Implement API call
-    await loadSuppliers()
-    closeDialog()
-    toast.add({
-      severity: 'success',
-      summary: 'Успішно',
-      detail: 'Постачальника збережено',
-      life: 3000
-    })
+    if (dialogMode.value === 'create') {
+      const response = await api.post('/api/suppliers', supplier.value);
+      suppliers.value.push(response.data);
+      toast.add({
+        severity: 'success',
+        summary: 'Успех',
+        detail: 'Постачальник доданий',
+        life: 2000
+      });
+    } else if (dialogMode.value === 'edit' && supplier.value.id) {
+      const response = await api.put(`/api/suppliers/${supplier.value.id}`, supplier.value);
+      const idx = suppliers.value.findIndex(s => s.id === supplier.value.id);
+      if (idx !== -1) suppliers.value[idx] = response.data;
+      toast.add({
+        severity: 'success',
+        summary: 'Успех',
+        detail: 'Постачальник оновлений',
+        life: 2000
+      });
+    }
+    dialogVisible.value = false;
+    await loadSuppliers();
   } catch (error) {
     toast.add({
       severity: 'error',
       summary: 'Помилка',
       detail: 'Не вдалося зберегти постачальника',
       life: 3000
-    })
+    });
+  } finally {
+    loading.value = false;
   }
-}
+};
+
+const editSupplier = (data: Supplier) => {
+  dialogMode.value = 'edit';
+  supplier.value = { ...data };
+  dialogVisible.value = true;
+};
+
+const deleteSupplier = async (data: Supplier) => {
+  loading.value = true;
+  try {
+    await api.delete(`/api/suppliers/${data.id}`);
+    suppliers.value = suppliers.value.filter(s => s.id !== data.id);
+    toast.add({
+      severity: 'success',
+      summary: 'Успех',
+      detail: 'Постачальник видалений',
+      life: 2000
+    });
+    await loadSuppliers();
+  } catch (error) {
+    toast.add({
+      severity: 'error',
+      summary: 'Помилка',
+      detail: 'Не вдалося видалити постачальника',
+      life: 3000
+    });
+  } finally {
+    loading.value = false;
+  }
+};
 
 const closeDialog = () => {
   dialogVisible.value = false
@@ -157,7 +178,7 @@ const closeDialog = () => {
 }
 
 onMounted(() => {
-  loadSuppliers()
+  loadSuppliers();
 })
 </script>
 
